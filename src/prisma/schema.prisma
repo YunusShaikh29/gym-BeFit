@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+enum Role {
+  Admin
+  Manager
+  Staff
+}
+
+// Represents a gym company and its branches
+// A unique combination of clientCode and cmpID identifies a specific branch
+model Company {
+  id        Int      @id @default(autoincrement()) // Auto-incrementing integer ID
+  clientCode String // Unique code for the overall gym client (e.g., G0000, G0001)
+  cmpID     Int    // Identifier for a specific branch within the clientCode (e.g., 1, 2)
+  name      String // Name of the gym or branch (e.g., "ABC-1", "ABC-2", "XYZ")
+
+  // Relationships to users and members belonging to this company/branch
+  users     User[]
+  members   Member[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Ensure that the combination of clientCode and cmpID is unique across all companies
+  @@unique([clientCode, cmpID])
+}
+
+// Represents users of the application (Admin, Manager, Staff)
+model User {
+  id        Int      @id @default(autoincrement()) // Auto-incrementing integer ID
+  mobileNo  String    // Mobile number used for login, must be unique
+  password  String   // Hashed password for security (store hashed value)
+  name      String?  // Optional: User's name
+  role      Role     @default(Staff) // The role of the user (Admin, Manager, Staff)
+  isActive  Boolean  @default(true) // Indicates if the user account is active
+  TT        Boolean  @default(false) // Soft delete flag: true if the user is considered deleted
+
+  // Link to the company this user belongs to
+  company   Company @relation(fields: [companyId], references: [id])
+  companyId Int // Changed to Int to match Company ID type
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Represents the members of the gym
+model Member {
+  id        Int      @id @default(autoincrement()) // Auto-incrementing integer ID
+  name      String   // Member's full name
+  mobileNo  String?  // Optional: Member's mobile number
+  address   String?  // Optional: Member's address
+  aadhar    String?  // Optional: Member's Aadhar number (handle sensitive data carefully)
+  city      String?  // Optional: Member's city
+  state     String?  // Optional: Member's state
+  // Add any other relevant member details here
+
+  isActive  Boolean  @default(true) // Indicates if the member is currently active
+  TT        Boolean  @default(false) // Soft delete flag: true if the member is considered deleted
+
+  // Link to the company/branch this member belongs to
+  companyId Int // Changed to Int to match Company ID type
+  company   Company @relation(fields: [companyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
