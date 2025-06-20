@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -14,68 +8,142 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 enum Role {
-  Admin
-  Manager
-  Staff
+  admin
+  manager
+  staff
 }
 
-// Represents a gym company and its branches
-// A unique combination of clientCode and cmpID identifies a specific branch
-model Company {
-  id        Int      @id @default(autoincrement()) // Auto-incrementing integer ID
-  clientCode String // Unique code for the overall gym client (e.g., G0000, G0001)
-  cmpID     Int    // Identifier for a specific branch within the clientCode (e.g., 1, 2)
-  name      String // Name of the gym or branch (e.g., "ABC-1", "ABC-2", "XYZ")
+enum Gender {
+  male
+  female
+}
 
-  // Relationships to users and members belonging to this company/branch
+enum PaymentMethod {
+  cash
+  online
+}
+
+enum MembershipStatus {
+  active
+  expired
+}
+
+model Company {
+  id        Int      @id @default(autoincrement())
+  clientCode String
+  branchID     Int // Removed @default(autoincrement()) to allow manual assignment as per your scenario
+  name      String
+
   users     User[]
   members   Member[]
+  Membership Membership[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Ensure that the combination of clientCode and cmpID is unique across all companies
-  @@unique([clientCode, cmpID])
+  @@unique([clientCode, branchID])
 }
 
-// Represents users of the application (Admin, Manager, Staff)
 model User {
-  id        Int      @id @default(autoincrement()) // Auto-incrementing integer ID
-  mobileNo  String    // Mobile number used for login, must be unique
-  password  String   // Hashed password for security (store hashed value)
-  name      String?  // Optional: User's name
-  role      Role     @default(Staff) // The role of the user (Admin, Manager, Staff)
-  isActive  Boolean  @default(true) // Indicates if the user account is active
-  TT        Boolean  @default(false) // Soft delete flag: true if the user is considered deleted
+  id        Int      @id @default(autoincrement())
+  mobileNo  String   
+  password  String
+  name      String?
+  role      Role     @default(admin)
+  isActive  Boolean  @default(true)
+  TT        Boolean  @default(false)
 
-  // Link to the company this user belongs to
   company   Company @relation(fields: [companyId], references: [id])
-  companyId Int // Changed to Int to match Company ID type
+  companyId Int
+
+
+  membersCreated   Member[]
+  paymentsReceived Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Membership Membership[]
+}
+
+model Member {
+  id        Int      @id @default(autoincrement())
+  name      String
+  mobileNo  String?
+  gender    Gender? 
+  address   String?
+  city      String?
+  pincode   String? 
+  email     String? 
+  aadhar    String? 
+
+  isActive  Boolean  @default(true)
+  TT        Boolean  @default(false)
+
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  createdById Int
+  createdBy   User    @relation(fields: [createdById], references: [id])
+
+  payments    Payment[]
+  memberships Membership[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Represents the members of the gym
-model Member {
-  id        Int      @id @default(autoincrement()) // Auto-incrementing integer ID
-  name      String   // Member's full name
-  mobileNo  String?  // Optional: Member's mobile number
-  address   String?  // Optional: Member's address
-  aadhar    String?  // Optional: Member's Aadhar number (handle sensitive data carefully)
-  city      String?  // Optional: Member's city
-  state     String?  // Optional: Member's state
-  // Add any other relevant member details here
+model Membership {
+  id                       Int         @id @default(autoincrement())
+  memberId                 Int
+  member                   Member      @relation(fields: [memberId], references: [id])
+  companyId                Int
+  company                  Company     @relation(fields: [companyId], references: [id])
+  createdById              Int
+  createdBy                User        @relation(fields: [createdById], references: [id])
 
-  isActive  Boolean  @default(true) // Indicates if the member is currently active
-  TT        Boolean  @default(false) // Soft delete flag: true if the member is considered deleted
+  // Membership Plan Details 
+  durationMonths           Int
+  totalPlanAmount          Decimal     @db.Decimal(10, 2)
+  discountAmount           Decimal     @db.Decimal(10, 2) @default(0.00)
+  finalPayableAmount       Decimal     @db.Decimal(10, 2) 
+  startDate                DateTime
+  endDate                  DateTime 
 
-  // Link to the company/branch this member belongs to
-  companyId Int // Changed to Int to match Company ID type
-  company   Company @relation(fields: [companyId], references: [id])
+  // Financial Tracking (Aggregate for THIS specific membership)
+  amountPaidByMember       Decimal     @db.Decimal(10, 2) @default(0.00) // Sum of payments towards THIS membership
+  balanceRemaining         Decimal     @db.Decimal(10, 2) // finalPayableAmount - amountPaidByMember
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  
+  status                   MembershipStatus      @default(active) 
+  remark                   String?
+
+  payments                 Payment[] 
+
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+model Payment {
+  id                         Int         @id @default(autoincrement())
+  amountReceived             Decimal     @db.Decimal(10, 2) // Amount of this specific transaction
+  paymentDate                DateTime    @default(now())
+  paymentMethod              PaymentMethod @default(cash)
+
+  // Link to the specific Membership this payment is for
+  membershipId               Int
+  membership                 Membership? @relation(fields: [membershipId], references: [id]) 
+
+  // Link to the Member who made the payment (still useful for direct member queries)
+  memberId                   Int 
+  member                     Member?     @relation(fields: [memberId], references: [id]) 
+
+  receivedByUserId           Int?
+  receivedBy                 User?       @relation(fields: [receivedByUserId], references: [id])
+
+  notes                      String?
+
+  createdAt                  DateTime    @default(now())
+  updatedAt                  DateTime    @updatedAt
 }
